@@ -1,5 +1,6 @@
 .virtualenv
 .venv
+.direnv
 .mypy_cache
 .pytest_cache
 .git
