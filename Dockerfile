@@ -25,7 +25,10 @@ ENV PYTHONUNBUFFERED=1 \
     VIRTUAL_ENV=/app/.venv \
     PATH="/app/.venv/bin:$PATH"
 
-# Apply Debian security updates to the runtime image.
+# Apply Debian security updates to the runtime image. SECURITY_REFRESH carries a
+# value that differs on every build, so the layer cache never serves the package
+# set of an earlier build.
+ARG SECURITY_REFRESH=0
 RUN apt-get update && \
     apt-get -y dist-upgrade && \
     apt-get clean && \

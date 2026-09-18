@@ -48,6 +48,8 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          build-args: |
+            SECURITY_REFRESH=${{ github.run_id }}-${{ github.run_attempt }}
           platforms: linux/amd64,linux/arm64
           provenance: false
           push: true
