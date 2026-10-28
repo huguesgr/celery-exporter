@@ -63,6 +63,9 @@ class Exporter:  # pylint: disable=too-many-instance-attributes,too-many-branche
         # through the worker heartbeat/online/offline lifecycle, so they need their own
         # last-seen bookkeeping to be purgeable. Keyed by (metric, label values).
         self.generic_last_seen = {}
+        # Monotonic time of the last event the receiver delivered, or of the start
+        # of the exporter before the first event
+        self.last_event_received = time.monotonic()
         self.worker_timeout_seconds = worker_timeout_seconds
         self.purge_offline_worker_metrics_after_seconds = (
             purge_offline_worker_metrics_seconds
@@ -183,6 +186,18 @@ class Exporter:  # pylint: disable=too-many-instance-attributes,too-many-branche
             ["queue_name", *self.static_label_keys],
             registry=self.registry,
         )
+
+    def seconds_since_last_event(self) -> float:
+        return time.monotonic() - self.last_event_received
+
+    def record_event_time(self, handler):
+        """Wrap an event handler so that each event it gets updates last_event_received."""
+
+        def wrapper(event):
+            self.last_event_received = time.monotonic()
+            handler(event)
+
+        return wrapper
 
     def scrape(self):
         if (
@@ -519,14 +534,20 @@ class Exporter:  # pylint: disable=too-many-instance-attributes,too-many-branche
         }
         for key in self.state_counters:
             handlers[key] = self.track_task_event
+        handlers = {
+            key: self.record_event_time(handler) for key, handler in handlers.items()
+        }
 
         with self.app.connection() as connection:  # type: ignore
+            self.last_event_received = time.monotonic()
             start_http_server(
                 self.registry,
                 connection,
                 click_params["host"],
                 click_params["port"],
                 self.scrape,
+                self.seconds_since_last_event,
+                click_params.get("max_event_silence", 0),
             )
             while True:
                 try:

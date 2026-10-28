@@ -37,11 +37,15 @@ class FakeConnection:
         pass
 
 
-def make_client(metrics_puller, connection=None):
+def make_client(
+    metrics_puller, connection=None, seconds_since_last_event=None, max_event_silence=0
+):
     app = create_app(
         CollectorRegistry(auto_describe=True),
         connection or FakeConnection(),
         metrics_puller,
+        seconds_since_last_event,
+        max_event_silence,
     )
     return app.test_client()
 
@@ -76,6 +80,31 @@ def test_health_recovers_once_metrics_can_be_scraped_again():
     assert client.get("/metrics").status_code == 500
     assert client.get("/health").status_code == 200
     assert client.get("/metrics").status_code == 200
+
+
+def test_health_fails_when_no_event_arrives_within_the_limit():
+    client = make_client(
+        lambda: None, seconds_since_last_event=lambda: 301, max_event_silence=300
+    )
+
+    res = client.get("/health")
+
+    assert res.status_code == 500
+    assert b"no event received for 301s" in res.data
+
+
+def test_health_passes_while_events_arrive_within_the_limit():
+    client = make_client(
+        lambda: None, seconds_since_last_event=lambda: 299, max_event_silence=300
+    )
+
+    assert client.get("/health").status_code == 200
+
+
+def test_health_ignores_event_silence_without_a_limit():
+    client = make_client(lambda: None, seconds_since_last_event=lambda: 86400)
+
+    assert client.get("/health").status_code == 200
 
 
 @pytest.mark.celery()

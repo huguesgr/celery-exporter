@@ -150,6 +150,23 @@ docker run -p 9808:9808 danihodovic/celery-exporter --broker-url=redis://redis.s
   --retry-interval=5
 ```
 
+###### Failing the health check when no event arrives
+
+The event receiver can stop getting events while its broker connection stays
+up, for example when the workers publish to a Redis replica that the receiver
+is not subscribed on. `/health` then still reports a reachable broker. With
+`--max-event-silence`, `/health` fails when no event has been received for
+that many seconds, so that a liveness probe restarts the exporter:
+
+```sh
+docker run -p 9808:9808 danihodovic/celery-exporter --broker-url=redis://redis.service.consul/1 \
+  --max-event-silence=300
+```
+
+Each worker sends a heartbeat event every 2 seconds by default, so the event
+stream is never quiet while a worker runs. Leave the option at 0 if the
+exporter can run with no worker.
+
 ##### Test for prometheus scrape target
 ```sh
 curl 127.0.0.1:9808/metrics

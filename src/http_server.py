@@ -100,21 +100,61 @@ def health():
             return (f"Connected to the broker {uri}, but unable to scrape: {ex}", 500)
         current_app.config["scrape_status"].record_success()
 
+    # A reachable broker isn't enough either - the event receiver can stop
+    # getting events while its connection stays up, for example when the
+    # workers publish to a Redis node that the receiver is not subscribed on.
+    max_event_silence = current_app.config["max_event_silence"]
+    if max_event_silence > 0:
+        silence = current_app.config["seconds_since_last_event"]()
+        if silence > max_event_silence:
+            logger.error(
+                "Connected to broker='{}' but no event received for {:.0f}s",
+                uri,
+                silence,
+            )
+            return (
+                f"Connected to the broker {uri}, but no event received for "
+                f"{silence:.0f}s (limit {max_event_silence}s)",
+                500,
+            )
+
     return f"Connected to the broker {uri}"
 
 
-def create_app(registry, celery_connection, metrics_puller):
+def create_app(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    registry,
+    celery_connection,
+    metrics_puller,
+    seconds_since_last_event=None,
+    max_event_silence=0,
+):
     app = Flask(__name__)
     app.config["registry"] = registry
     app.config["celery_connection"] = celery_connection
     app.config["metrics_puller"] = metrics_puller
     app.config["scrape_status"] = ScrapeStatus()
+    app.config["seconds_since_last_event"] = seconds_since_last_event
+    app.config["max_event_silence"] = max_event_silence
     app.register_blueprint(blueprint)
     return app
 
 
-def start_http_server(registry, celery_connection, host, port, metrics_puller):
-    app = create_app(registry, celery_connection, metrics_puller)
+def start_http_server(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    registry,
+    celery_connection,
+    host,
+    port,
+    metrics_puller,
+    seconds_since_last_event=None,
+    max_event_silence=0,
+):
+    app = create_app(
+        registry,
+        celery_connection,
+        metrics_puller,
+        seconds_since_last_event,
+        max_event_silence,
+    )
     Thread(
         target=serve,
         args=(app,),
