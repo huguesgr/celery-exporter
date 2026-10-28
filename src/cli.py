@@ -66,6 +66,17 @@ def _eq_sign_separated_argument_to_dict(_ctx, _param, value):
     help="Broker exception retry interval in seconds, default is 0 for no retry",
 )
 @click.option(
+    "--max-event-silence",
+    type=int,
+    default=0,
+    show_default=True,
+    help="If no event has been received from the broker in this many seconds, "
+    "/health fails. Each worker sends a heartbeat event every 2 seconds by default, "
+    "so the event stream is never quiet while a worker runs. Leave it at 0 when the "
+    "exporter can run with no worker, else /health fails then too. If set to 0, "
+    "/health does not check events.",
+)
+@click.option(
     "--host",
     default="0.0.0.0",
     show_default=True,
@@ -169,6 +180,7 @@ def cli(  # pylint: disable=too-many-arguments,too-many-positional-arguments,too
     broker_transport_option,
     accept_content,
     retry_interval,
+    max_event_silence,
     host,
     port,
     buckets,
